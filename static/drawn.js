@@ -5,6 +5,13 @@ $(function () {
   var content = $('#content');
   var input = $('#input');
   var status = $('#status');
+  var dealerName = 'Dealer';
+  var dealerColor = '#000000';
+  var timerTimeout = 1000;
+  
+  var drawing = false;
+  var word;
+  
 
   // my color assigned by the server
   var myColor = false;
@@ -26,14 +33,22 @@ $(function () {
     });
 
     // most important part - incoming messages
-    socket.on('chat', function (data) {
+    socket.on('guess', function (data) {
       input.removeAttr('disabled'); // let the user write another message
-      addMessage(data.author, data.text,
+      addMessage(data.author, data.guess,
                  data.color, new Date(data.time));
     });
 
-    socket.on('color', function(data) {
+    socket.on('config', function(data) {
       myColor = data.color;
+      drawing = data.drawing;
+      if (drawing) {
+        word = data.word;
+        addMessage(dealerName, 'You get to draw \'' + word + '\'', dealerColor, new Date());
+      }
+      else {
+        addMessage(dealerName, 'Guess the word!', dealerColor, new Date());
+      }
       status.text(myName + ': ').css('color', myColor);
       input.removeAttr('disabled').focus();
     });
@@ -41,11 +56,26 @@ $(function () {
     socket.on('history', function(data) {
       // insert all messages into the chat window
       for (var i=0; i < data.history.length; i++) {
-          addMessage(data.history[i].author, data.history[i].text,
+          addMessage(data.history[i].author, data.history[i].guess,
                      data.history[i].color, new Date(data.history[i].time));
       }
     });
 
+    socket.on('drawing', function(data) {
+      clickX = data.x;
+      clickY = data.y;
+      clickDrag = data.drag;
+      redraw();
+    });
+
+    socket.on('guessed', function(data) {
+      drawing = false;
+      addMessage(dealerName,
+                 '' + data.user + ' guessed the word - ' + data.word + '!',
+                 dealerColor,
+                 new Date());
+    });
+    
   });
 
 
@@ -63,7 +93,7 @@ $(function () {
         myName = text;
       }
       else {
-        socket.emit( 'chat', { text: text } );
+        socket.emit( 'guess', { guess: text } );
       }
 
       $(this).val('');
@@ -101,6 +131,7 @@ $(function () {
   var paint;
   var canvas;
   var context;
+  var timing = false;
 
   function prepareCanvas() {
     var canvasDiv = document.getElementById('canvasDiv');
@@ -115,6 +146,8 @@ $(function () {
     context = canvas.getContext('2d');
   
     $('#canvas').mousedown(function(e) {
+      if (!drawing) return;
+    
       var mouseX = e.pageX - this.offsetLeft;
       var mouseY = e.pageY - this.offsetTop;
       
@@ -124,6 +157,8 @@ $(function () {
     });
     
     $('#canvas').mousemove(function(e) {
+      if (!drawing) return;
+    
       if(paint) {
         addClick(e.pageX - this.offsetLeft, e.pageY - this.offsetTop, true);
         redraw();
@@ -131,11 +166,15 @@ $(function () {
     });
     
     $('#canvas').mouseup(function(e) {
+      if (!drawing) return;
+    
       paint = false;
       redraw();
     });
     
     $('#canvas').mouseleave(function(e) {
+      if (!drawing) return;
+    
       paint = false;
     });
   }
@@ -171,8 +210,18 @@ $(function () {
       context.closePath();
       context.stroke();
     }
+    
+    if (drawing && !timing) {
+      timing = true;
+      setTimeout(submitDrawing, timerTimeout);
+    }
   }
   
   prepareCanvas();
+  
+  function submitDrawing() {
+    socket.emit('drawing', { x:clickX, y:clickY, drag:clickDrag });
+    timing = false;
+  }
   
 });

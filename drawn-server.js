@@ -6,7 +6,7 @@ process.title = 'node-drawn';
 /**
  * Global variables
  */
-// Port where we'll run the Sicket.IO server
+// Port where we'll run the Socket.IO server
 var SocketIOServerPort = 1337;
 // latest 100 messages
 var history = [ ];
@@ -16,6 +16,11 @@ var clients = [ ];
 var colors = [ 'red', 'green', 'blue', 'magenta', 'purple', 'plum', 'orange' ];
 // ... in random order
 colors.sort(function(a,b) { return Math.random() > 0.5; } );
+
+// The word the user gets to draw
+var userWord;
+// The word that guesses are matched against
+var serverWord;
 
 // HTTP server
 var nodeStatic = require('node-static');
@@ -37,8 +42,9 @@ io.sockets.on('connection', function(socket) {
   var index = clients.push(socket) - 1;
   var userName = false;
   var userColor = false;
+  var userDrawing = (index == 0); // The first user gets to draw
 
-  console.log((new Date()) + ' Connection accepted.');
+  console.log((new Date()) + ' Connection accepted: ' + userDrawing);
 
   // send back chat history
   if (history.length > 0) {
@@ -49,19 +55,26 @@ io.sockets.on('connection', function(socket) {
     userName = htmlEscape(data.username);
     // get random color and send it back to the user
     userColor = colors.shift();
-    socket.emit('color', { color: userColor });
+    if (userDrawing) {
+      getWord();
+    }
+    socket.emit('config', { color: userColor, drawing: userDrawing, word: userWord });
     console.log((new Date()) + ' User is known as: ' + userName
                  + ' with ' + userColor + ' color.');
   });
 
-  // user sent a chat message
-  socket.on('chat', function(data) {
+  socket.on('drawing', function(data) {
+    socket.broadcast.emit('drawing', data);
+  });
+
+  // user sent a guess
+  socket.on('guess', function(data) {
     console.log((new Date()) + ' Received Message from '
-                + userName + ': ' + data.text);
+                + userName + ': ' + data.guess);
                 
     var obj = {
       time: (new Date()).getTime(),
-      text: htmlEscape(data.text),
+      guess: htmlEscape(data.guess),
       author: userName,
       color: userColor
     };
@@ -70,7 +83,12 @@ io.sockets.on('connection', function(socket) {
     history.push(obj);
     history = history.slice(-100);
 
-    io.sockets.emit('chat', obj);
+    io.sockets.emit('guess', obj);
+    
+    // Check to see if the guess is correct
+    if (!userDrawing && correctGuess(data.guess)) {
+      io.sockets.emit('guessed', { user: userName, word: userWord } );
+    }
   });
 
   socket.on('disconnect', function(socket) {
@@ -83,6 +101,20 @@ io.sockets.on('connection', function(socket) {
       colors.push(userColor);
     }
   });
+
+  function getWord() {
+    // TODO pick a random word from a file.
+    // TODO have the word include a list of valid guesses 
+    //      (e.g. "DJ" would be satisfied by "D J")
+    //      Note that the matching is currently case insensitive
+    userWord = "DJ";
+    serverWord = userWord.toLowerCase();
+  }
+
+  function correctGuess(guess) {
+    console.log("serverWord="+serverWord+", guess="+guess);
+    return serverWord == guess.toLowerCase();
+  }
 
 });
 
