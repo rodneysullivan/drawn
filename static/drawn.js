@@ -44,10 +44,10 @@ $(function () {
       drawing = data.drawing;
       if (drawing) {
         word = data.word;
-        addMessage(dealerName, 'You get to draw \'' + word + '\'', dealerColor, new Date());
+        printYourTurn(word);
       }
       else {
-        addMessage(dealerName, 'Guess the word!', dealerColor, new Date());
+        printYourTurnToGuess();
       }
       status.text(myName + ': ').css('color', myColor);
       input.removeAttr('disabled').focus();
@@ -59,13 +59,12 @@ $(function () {
           addMessage(data.history[i].author, data.history[i].guess,
                      data.history[i].color, new Date(data.history[i].time));
       }
+      console.log("drawingData", data.drawing);
+      populateDrawing(data.drawing)
     });
 
     socket.on('drawing', function(data) {
-      clickX = data.x;
-      clickY = data.y;
-      clickDrag = data.drag;
-      redraw();
+      populateDrawing(data)
     });
 
     socket.on('guessed', function(data) {
@@ -74,6 +73,15 @@ $(function () {
                  '' + data.user + ' guessed the word - ' + data.word + '!',
                  dealerColor,
                  new Date());
+      clearDrawingData();
+      redraw();
+      if (data.yourTurn) {
+        drawing = true;
+        printYourTurn(data.newWord);
+      } else {
+        printYourTurnToGuess();
+      }
+      
     });
     
   });
@@ -120,6 +128,23 @@ $(function () {
          + (dt.getHours() < 10 ? '0' + dt.getHours() : dt.getHours()) + ':'
          + (dt.getMinutes() < 10 ? '0' + dt.getMinutes() : dt.getMinutes())
          + ': ' + message + '</p>');
+  }
+  
+  function printYourTurn(word) {
+    addMessage(dealerName, 'You get to draw \'' + word + '\'', dealerColor, new Date());
+  }
+  
+  function printYourTurnToGuess() {
+    addMessage(dealerName, 'Guess the word!', dealerColor, new Date());
+  }
+  
+  function populateDrawing(data) {
+    if (data) {
+      clickX = data.x;
+      clickY = data.y;
+      clickDrag = data.drag;
+      redraw();
+    }
   }
   
   var canvasWidth = 490;
@@ -183,6 +208,12 @@ $(function () {
     clickX.push(x);
     clickY.push(y);
     clickDrag.push(dragging);
+  }
+  
+  function clearDrawingData() {
+    clickX = [];
+    clickY = [];
+    clickDrag = [];
   }
   
   function clearCanvas() {
